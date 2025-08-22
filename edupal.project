@@ -1,0 +1,397 @@
+```python
+# all_in_one_edustarter.py
+# A single-file prototype combining FastAPI backend, minimal HTML UI, and simple test routes.
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
+from fastapi.responses import HTMLResponse
+
+app = FastAPI(title="EduStarter API")
+
+# Enable CORS for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# In-memory database
+class Student(BaseModel):
+    id: int
+    name: str
+    age: int
+    course: Optional[str] = None
+
+students_db: List[Student] = []
+
+# Health check
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# CRUD Endpoints
+@app.post("/students", response_model=Student)
+def create_student(student: Student):
+    if any(s.id == student.id for s in students_db):
+        raise HTTPException(status_code=400, detail="Student with this ID already exists.")
+    students_db.append(student)
+    return student
+
+@app.get("/students", response_model=List[Student])
+def list_students():
+    return students_db
+
+@app.get("/students/{student_id}", response_model=Student)
+def get_student(student_id: int):
+    for s in students_db:
+        if s.id == student_id:
+            return s
+    raise HTTPException(status_code=404, detail="Student not found")
+
+@app.patch("/students/{student_id}", response_model=Student)
+def update_student(student_id: int, name: Optional[str] = None, age: Optional[int] = None, course: Optional[str] = None):
+    for s in students_db:
+        if s.id == student_id:
+            if name: s.name = name
+            if age: s.age = age
+            if course: s.course = course
+            return s
+    raise HTTPException(status_code=404, detail="Student not found")
+
+@app.delete("/students/{student_id}")
+def delete_student(student_id: int):
+    global students_db
+    students_db = [s for s in students_db if s.id != student_id]
+    return {"deleted": student_id}
+
+# Simple Frontend
+@app.get("/", response_class=HTMLResponse)
+def home():
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>EduStarter UI</title>
+      <script>
+        async function fetchStudents(){
+          let res = await fetch('/students');
+          let data = await res.json();
+          document.getElementById('list').innerHTML = JSON.stringify(data, null, 2);
+        }
+        async function addStudent(){
+          let id = document.getElementById('id').value;
+          let name = document.getElementById('name').value;
+          let age = document.getElementById('age').value;
+          let course = document.getElementById('course').value;
+          await fetch('/students', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: parseInt(id), name, age: parseInt(age), course})});
+          fetchStudents();
+        }
+      </script>
+    </head>
+    <body>
+      <h1>EduStarter</h1>
+      <input id="id" placeholder="ID" />
+      <input id="name" placeholder="Name" />
+      <input id="age" placeholder="Age" />
+      <input id="course" placeholder="Course" />
+      <button onclick="addStudent()">Add Student</button>
+      <pre id="list"></pre>
+      <script>fetchStudents()</script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+# Run with: uvicorn all_in_one_edustarter:app --reload
+
+# ---------------- TESTS ----------------
+# You can run these with pytest
+
+def test_health():
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+def test_create_and_list_students():
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    student = {"id": 1, "name": "Alice", "age": 20, "course": "Math"}
+    r = client.post("/students", json=student)
+    assert r.status_code == 200
+    r = client.get("/students")
+    assert r.status_code == 200
+    data = r.json()
+    assert any(s["name"] == "Alice" for s in data)
+```
+
+---
+
+## 🧩 All‑in‑One Code (single file you can run now)
+
+> Copy this into a file named **`app.py`**, install the few dependencies, and run it. It includes: FastAPI API + SQLite DB + a tiny browser UI served at `/`.
+
+### Install & Run
+
+```bash
+# 1) Install deps
+python -m venv .venv && source .venv/bin/activate  # Windows: use .venv/Scripts/activate
+pip install fastapi==0.115.0 uvicorn[standard]==0.30.6 sqlmodel==0.0.22
+
+# 2) Start the app
+python app.py
+# Open http://127.0.0.1:8000  (UI)
+# API docs at http://127.0.0.1:8000/docs
+```
+
+### `app.py`
+
+```python
+# app.py — EduStarter: single-file FastAPI + SQLite + tiny UI
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import SQLModel, Field, create_engine, Session, select
+from typing import Optional, List
+import uvicorn
+
+# ---------- Database & Models ----------
+DATABASE_URL = "sqlite:///./app.db"
+engine = create_engine(DATABASE_URL, echo=False)
+
+class StudentBase(SQLModel):
+    name: str
+    age: int
+    grade: str
+
+class Student(StudentBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+class StudentCreate(StudentBase):
+    pass
+
+class StudentRead(StudentBase):
+    id: int
+
+class StudentUpdate(SQLModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    grade: Optional[str] = None
+
+
+def init_db():
+    SQLModel.metadata.create_all(engine)
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+# ---------- App ----------
+app = FastAPI(title="EduStarter (All-in-One)", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
+# ---------- Health ----------
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# ---------- CRUD ----------
+@app.post("/students", response_model=StudentRead, status_code=201)
+def create_student(payload: StudentCreate, session: Session = Depends(get_session)):
+    student = Student(**payload.model_dump())
+    session.add(student)
+    session.commit()
+    session.refresh(student)
+    return student
+
+@app.get("/students", response_model=List[StudentRead])
+def list_students(session: Session = Depends(get_session)):
+    return session.exec(select(Student)).all()
+
+@app.get("/students/{student_id}", response_model=StudentRead)
+def get_student(student_id: int, session: Session = Depends(get_session)):
+    student = session.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
+
+@app.patch("/students/{student_id}", response_model=StudentRead)
+def update_student(student_id: int, payload: StudentUpdate, session: Session = Depends(get_session)):
+    student = session.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    update_data = payload.model_dump(exclude_unset=True)
+    for k, v in update_data.items():
+        setattr(student, k, v)
+    session.add(student)
+    session.commit()
+    session.refresh(student)
+    return student
+
+@app.delete("/students/{student_id}", status_code=204)
+def delete_student(student_id: int, session: Session = Depends(get_session)):
+    student = session.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    session.delete(student)
+    session.commit()
+    return None
+
+# ---------- Minimal UI served at / ----------
+INDEX_HTML = """
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>EduStarter — Students</title>
+  <style>
+    body { font-family: system-ui, Arial; margin: 24px; }
+    input, button { padding: 8px 10px; margin-right: 6px; }
+    .card { border: 1px solid #ddd; padding: 16px; border-radius: 12px; margin-top: 16px; }
+    .row { margin-bottom: 8px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; }
+    .muted { color: #666 }
+  </style>
+</head>
+<body>
+  <h1>EduStarter — Students</h1>
+  <div class='row'>
+    <input id='name' placeholder='Name' />
+    <input id='age' type='number' placeholder='Age' />
+    <input id='grade' placeholder='Grade' />
+    <button id='add'>Add</button>
+    <button id='refresh'>Refresh</button>
+  </div>
+  <div class='card'>
+    <div class='muted'>List of students</div>
+    <table id='table'>
+      <thead><tr><th>ID</th><th>Name</th><th>Age</th><th>Grade</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+<script>
+const API = '';
+const $ = sel => document.querySelector(sel);
+
+async function fetchStudents(){
+  const r = await fetch(API + '/students');
+  const data = await r.json();
+  const tbody = document.querySelector('#table tbody');
+  tbody.innerHTML = data.map(s => `
+    <tr>
+      <td>${s.id}</td>
+      <td><input value="${s.name}" data-id="${s.id}" data-field="name"/></td>
+      <td><input type="number" value="${s.age}" data-id="${s.id}" data-field="age"/></td>
+      <td><input value="${s.grade}" data-id="${s.id}" data-field="grade"/></td>
+      <td>
+        <button onclick="save(${s.id})">Save</button>
+        <button onclick="del(${s.id})">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function add(){
+  const name = document.querySelector('#name').value.trim();
+  const age = parseInt(document.querySelector('#age').value, 10);
+  const grade = document.querySelector('#grade').value.trim();
+  if(!name || !age || !grade){ alert('Fill all fields'); return; }
+  await fetch(API + '/students', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name, age, grade})
+  });
+  document.querySelector('#name').value='';
+  document.querySelector('#age').value='';
+  document.querySelector('#grade').value='';
+  fetchStudents();
+}
+
+async function save(id){
+  const rowInputs = Array.from(document.querySelectorAll(`[data-id="${id}"]`));
+  const payload = {};
+  rowInputs.forEach(inp => payload[inp.getAttribute('data-field')] = inp.type==='number' ? parseInt(inp.value,10) : inp.value);
+  await fetch(API + '/students/' + id, {
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  fetchStudents();
+}
+
+async function del(id){
+  await fetch(API + '/students/' + id, { method:'DELETE' });
+  fetchStudents();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  document.querySelector('#add').onclick = add;
+  document.querySelector('#refresh').onclick = fetchStudents;
+  fetchStudents();
+});
+</script>
+</body>
+</html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return HTMLResponse(INDEX_HTML)
+
+# ---------- Entry ----------
+if __name__ == "__main__":
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+```
+
+### Optional: one‑file tests (save as `test_app.py` next to app.py)
+
+```python
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_health():
+    r = client.get('/health')
+    assert r.status_code == 200
+    assert r.json()['status'] == 'ok'
+
+def test_crud_student():
+    # Create
+    r = client.post('/students', json={"name":"Ada", "age":17, "grade":"SS2"})
+    assert r.status_code == 201
+    sid = r.json()['id']
+    # List
+    r = client.get('/students'); assert r.status_code == 200
+    assert any(x['id']==sid for x in r.json())
+    # Get
+    r = client.get(f'/students/{sid}'); assert r.status_code == 200
+    # Update
+    r = client.patch(f'/students/{sid}', json={"grade":"SS3"}); assert r.status_code == 200
+    assert r.json()['grade'] == 'SS3'
+    # Delete
+    r = client.delete(f'/students/{sid}'); assert r.status_code == 204
+```
+
+> Run tests with:
+
+```bash
+pip install pytest
+pytest -q
+```
