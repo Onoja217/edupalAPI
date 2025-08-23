@@ -1,0 +1,92 @@
+# go into your cloned repo (adjust if your folder is named differently)
+cd ~/EduPal-Project
+
+# switch to main branch (force if needed)
+git checkout -B main
+
+# create an empty commit to bootstrap repo (fixes the "does not have any commits yet" error)
+git commit --allow-empty -m "chore: bootstrap repository"
+
+# copy your project files into this repo (adjust path if your project is elsewhere)
+cp -r ~/edupalAPI/* ./
+cp -r ~/edupalAPI/.* ./ 2>/dev/null || true
+
+# generate README.md from your 20-slide content
+cat > README.md <<'EOF'
+# 📘 EduPal Offline Repository
+
+**An Offline Learning Assistant Platform**
+
+---
+
+## 🎓 Overview  
+- React + FastAPI • Docker • Kubernetes • CI/CD  
+- Team: Engineering Team  
+- Date: 21 Aug 2025 (Africa/Lagos)  
+
+---
+
+## ❌ Problem Statement  
+- Internet-dependent educational content  
+- Limited access in remote/restricted areas  
+- Need for instant, reliable assistance  
+
+---
+
+## ✅ Our Solution / Value  
+- Offline-capable assistant, self-contained, scalable, easy to maintain  
+- **Value**: 100% offline • low resource needs • enterprise-ready • extensible  
+
+---
+
+## 📐 System Architecture  
+- **Frontend**: UI/UX  
+- **AI Engine**: Q&A processing  
+- **Kubernetes**: orchestration & scaling  
+- **CI/CD**: automated testing & deployments  
+
+---
+
+## 🛠️ Technology Stack  
+- **Frontend**: React 18 (hooks), Axios, CSS3 (Flex/Grid), CRA  
+- **Backend**: FastAPI, Python 3.9, Uvicorn, structured logging  
+- **Infra**: Docker, Kubernetes, GitHub Actions, NGINX  
+
+---
+
+## 🖥️ Frontend Implementation  
+- Clean, responsive UI; real-time question submission  
+- Loading states & error handling; optimized bundle  
+- Perf: initial load < 2 MB; TTI < 3 s; fully responsive to 320 px  
+
+---
+
+## 🤖 AI Engine Implementation  
+- FastAPI with OpenAPI docs; request/response validation  
+- Extensible knowledge base; health checks (/ping, /qa)  
+- Sample KB dict; docs at `/docs` and `/redoc`  
+
+---
+
+## 📦 Containerization  
+- Multi-stage builds; Alpine base; layer caching; security-focused  
+- Image sizes (approx): Frontend ~20 MB; AI Engine ~120 MB  
+
+---
+
+## ☸️ Kubernetes Deployment  
+- Namespace isolation; rolling updates; resource limits; probes  
+- HPA based on CPU; 2–5 replicas; 70% CPU threshold  
+
+---
+
+## 🔄 CI/CD Pipeline  
+- **Flow**: Checkout & validate → Build & push → Deploy to K8s → Verify  
+- Triggers on push to `main`; build caching; env substitution; rollback ready  
+
+---
+
+## 🧑‍💻 Local Development  
+```bash
+git clone … && cd frontend && npm install
+docker-compose up
